@@ -12,7 +12,6 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
-        /* Subtitle System */
         #subtitle-container {
             position: fixed;
             top: 40px;
@@ -24,16 +23,16 @@
         }
 
         #subtitles {
-            background: rgba(0, 0, 0, 0.75);
+            background: rgba(0, 0, 0, 0.85);
             color: white;
-            padding: 10px 25px;
+            padding: 12px 28px;
             border-radius: 30px;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             opacity: 0;
-            transition: opacity 0.5s ease-in-out;
-            max-width: 80%;
+            transition: opacity 0.4s ease;
+            max-width: 70%;
             text-align: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
         #subtitles.show { opacity: 1; }
@@ -46,16 +45,16 @@
         }
 
         button {
-            padding: 10px 20px;
+            padding: 10px 22px;
             cursor: pointer;
             background: #2f3640;
             border: none;
             color: white;
             border-radius: 5px;
             font-weight: bold;
+            pointer-events: auto;
         }
 
-        /* Human Entities */
         .human {
             position: absolute;
             width: 70px;
@@ -70,14 +69,14 @@
             user-select: none;
             box-shadow: 0 6px 12px rgba(0,0,0,0.2);
             border: 2px solid rgba(255,255,255,0.4);
-            transition: outline 0.2s;
+            z-index: 5;
         }
 
-        .human.selected { outline: 5px solid #0097e6; }
+        .human.selected { outline: 5px solid #0097e6; z-index: 10; }
         
         .human.thinking {
             animation: pulse 0.6s infinite alternate;
-            box-shadow: 0 0 20px #f1c40f;
+            box-shadow: 0 0 25px #f1c40f;
         }
 
         @keyframes pulse {
@@ -96,44 +95,45 @@
             100% { transform: translate(1px, -1px); }
         }
 
-        /* Controls */
         #input-area {
             position: fixed;
-            bottom: 20px;
+            bottom: 25px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
             gap: 10px;
             background: white;
-            padding: 10px;
+            padding: 12px;
             border-radius: 50px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            z-index: 100;
         }
 
         #user-input {
             border: none;
             outline: none;
-            width: 300px;
-            padding: 5px 15px;
+            width: 350px;
+            padding: 5px 10px;
             font-size: 16px;
         }
 
         #trash-can {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 60px;
-            height: 60px;
+            bottom: 25px;
+            right: 25px;
+            width: 70px;
+            height: 70px;
             background: #c23616;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 24px;
-            transition: transform 0.2s;
+            font-size: 28px;
+            transition: transform 0.2s, background 0.3s;
+            z-index: 100;
         }
-        #trash-can.hovered { transform: scale(1.4); }
+        #trash-can.hovered { transform: scale(1.3); background: #eb4d4b; }
     </style>
 </head>
 <body>
@@ -147,7 +147,7 @@
 </div>
 
 <div id="input-area">
-    <input type="text" id="user-input" placeholder="Select a human and type here...">
+    <input type="text" id="user-input" placeholder="Click a human, then type here...">
     <button onclick="sendText()">Send</button>
 </div>
 
@@ -156,31 +156,44 @@
 <script>
     const API_KEY = "AIzaSyAZT_FImb1IohN1F_MOcqdxBDU8eRxj0no";
     let humans = [];
-    const names = ["Mark", "Sarah", "Leo", "Mia", "Dave", "Elena", "Chris", "Ruby"];
+    const names = ["Mark", "Sarah", "Leo", "Mia", "Dave", "Elena", "Chris", "Ruby", "James", "Lily"];
     const skinColors = ["#FFDBAC", "#F1C27D", "#E0AC69", "#8D5524", "#C68642"];
     
     let selectedHuman = null;
 
+    // --- LOADING LOGIC ---
     window.onload = () => {
-        const saved = localStorage.getItem('socialProject2_textMode');
-        if (saved) JSON.parse(saved).forEach(h => createHumanElement(h));
+        try {
+            const saved = localStorage.getItem('socialProject2_vFINAL');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if(Array.isArray(parsed)) {
+                    parsed.forEach(h => createHumanElement(h));
+                    console.log("Loaded " + parsed.length + " humans.");
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load save data. Starting fresh.");
+        }
     };
 
     function save() {
-        localStorage.setItem('socialProject2_textMode', JSON.stringify(humans.map(h => ({
+        localStorage.setItem('socialProject2_vFINAL', JSON.stringify(humans.map(h => ({
             name: h.name, color: h.color, x: h.x, y: h.y, memory: h.memory, pitch: h.pitch
         }))));
     }
 
+    // --- SPAWNING LOGIC ---
     function addHuman() {
-        createHumanElement({
+        const newHuman = {
             name: names[Math.floor(Math.random() * names.length)],
             color: skinColors[Math.floor(Math.random() * skinColors.length)],
             x: 100 + Math.random() * (window.innerWidth - 200),
-            y: 100 + Math.random() * (window.innerHeight - 300),
+            y: 100 + Math.random() * (window.innerHeight - 350),
             memory: [],
-            pitch: 0.6 + Math.random() * 0.8
-        });
+            pitch: 0.7 + Math.random() * 0.7
+        };
+        createHumanElement(newHuman);
         save();
     }
 
@@ -197,6 +210,7 @@
         document.body.appendChild(el);
 
         el.onmousedown = (e) => {
+            // Selection logic
             if(selectedHuman) selectedHuman.element.classList.remove('selected');
             selectedHuman = obj;
             el.classList.add('selected');
@@ -211,6 +225,7 @@
                 el.style.left = obj.x + 'px';
                 el.style.top = obj.y + 'px';
 
+                // Trash detection
                 const rect = document.getElementById('trash-can').getBoundingClientRect();
                 if (me.pageX > rect.left && me.pageX < rect.right && me.pageY > rect.top && me.pageY < rect.bottom) {
                     document.getElementById('trash-can').classList.add('hovered');
@@ -222,18 +237,20 @@
             document.onmouseup = (me) => {
                 document.onmousemove = null;
                 el.classList.remove('dragging');
+                
                 const rect = document.getElementById('trash-can').getBoundingClientRect();
                 if (me.pageX > rect.left && me.pageX < rect.right && me.pageY > rect.top && me.pageY < rect.bottom) {
                     obj.element.remove();
                     humans = humans.filter(h => h !== obj);
-                    selectedHuman = null;
+                    if(selectedHuman === obj) selectedHuman = null;
+                    document.getElementById('trash-can').classList.remove('hovered');
                 }
                 save();
             };
         };
     }
 
-    // --- TEXT INTERACTION ---
+    // --- INTERACTION ---
     document.getElementById('user-input').addEventListener('keypress', (e) => {
         if(e.key === 'Enter') sendText();
     });
@@ -241,8 +258,62 @@
     async function sendText() {
         const inputField = document.getElementById('user-input');
         const text = inputField.value.trim();
-        if(!text || !selectedHuman) return;
+        
+        if(!text) return;
+        if(!selectedHuman) {
+            alert("Please click on a human first to select them!");
+            return;
+        }
 
-        inputField.value = "";
         const target = selectedHuman;
-        target.element.classList.
+        inputField.value = "";
+        target.element.classList.add('thinking');
+
+        try {
+            const context = target.memory.slice(-4).map(m => `${m.role}: ${m.text}`).join("\n");
+            const prompt = `You are a person named ${target.name}. 
+            Past context: ${context}
+            The user says: "${text}"
+            Response: (one short sentence only)`;
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+
+            const result = await response.json();
+            const reply = result.candidates[0].content.parts[0].text;
+
+            target.memory.push({ role: "User", text: text }, { role: "You", text: reply });
+            showSubtitles(target.name, reply);
+            
+            // TTS Logic
+            window.speechSynthesis.cancel();
+            const speech = new SpeechSynthesisUtterance(reply);
+            speech.pitch = target.pitch;
+            window.speechSynthesis.speak(speech);
+            
+            save();
+        } catch (e) {
+            console.error(e);
+            showSubtitles("SYSTEM", "Communication failed. Check connection.");
+        } finally {
+            target.element.classList.remove('thinking');
+        }
+    }
+
+    function showSubtitles(name, text) {
+        const box = document.getElementById('subtitles');
+        box.innerHTML = `<strong>${name}:</strong> ${text}`;
+        box.classList.add('show');
+        
+        clearTimeout(window.subTimer);
+        window.subTimer = setTimeout(() => {
+            box.classList.remove('show');
+        }, 5000);
+    }
+</script>
+
+</body>
+</html>
