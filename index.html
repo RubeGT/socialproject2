@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social Project 2</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #2c3e50;
+            font-family: sans-serif;
+            color: white;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            pointer-events: auto;
+            background: #27ae60;
+            border: none;
+            color: white;
+            border-radius: 5px;
+        }
+
+        .human {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            text-align: center;
+            font-size: 12px;
+            user-select: none;
+            transition: transform 0.1s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .human:hover {
+            transform: scale(1.1);
+            outline: 3px solid white;
+        }
+
+        .human.dragging {
+            cursor: grabbing;
+            animation: shake 0.1s infinite;
+        }
+
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            25% { transform: translate(-1px, -2px) rotate(-1deg); }
+            50% { transform: translate(-3px, 0px) rotate(1deg); }
+            75% { transform: translate(3px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -1px) rotate(-1deg); }
+        }
+
+        #speech-indicator {
+            position: fixed;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 1.2rem;
+            color: #f1c40f;
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui-layer">
+    <h1>Social Project 2</h1>
+    <button onclick="addHuman()">Add Human</button>
+    <p>Hold 'Space' to talk to the selected human</p>
+</div>
+
+<div id="speech-indicator"></div>
+
+<script>
+    const humans = [];
+    const names = ["Land", "Ocean", "River", "Dusty", "Sky", "Ash", "Blaze"];
+    const skinColors = ["#FFDBAC", "#F1C27D", "#E0AC69", "#8D5524", "#C68642"];
+    
+    let selectedHuman = null;
+    let isDragging = false;
+
+    // --- INITIALIZE & LOAD DATA ---
+    window.onload = () => {
+        const saved = localStorage.getItem('socialProjectData');
+        if (saved) {
+            const data = JSON.parse(saved);
+            data.forEach(hData => createHumanElement(hData));
+        }
+    };
+
+    function saveState() {
+        const data = humans.map(h => ({
+            name: h.name,
+            color: h.color,
+            x: h.x,
+            y: h.y,
+            memory: h.memory
+        }));
+        localStorage.setItem('socialProjectData', JSON.stringify(data));
+    }
+
+    // --- HUMAN CREATION ---
+    function addHuman() {
+        const hData = {
+            name: names[Math.floor(Math.random() * names.length)] + " " + Math.floor(Math.random() * 100),
+            color: skinColors[Math.floor(Math.random() * skinColors.length)],
+            x: Math.random() * (window.innerWidth - 100),
+            y: Math.random() * (window.innerHeight - 100),
+            memory: [] // Chat history for AI
+        };
+        createHumanElement(hData);
+        saveState();
+    }
+
+    function createHumanElement(data) {
+        const el = document.createElement('div');
+        el.className = 'human';
+        el.style.backgroundColor = data.color;
+        el.style.left = data.x + 'px';
+        el.style.top = data.y + 'px';
+        el.innerText = data.name;
+
+        const humanObj = { ...data, element: el };
+        humans.push(humanObj);
+        document.body.appendChild(el);
+
+        // Interaction: Dragging (Tomodachi Life style)
+        el.onmousedown = (e) => {
+            isDragging = true;
+            selectedHuman = humanObj;
+            el.classList.add('dragging');
+            
+            let shiftX = e.clientX - el.getBoundingClientRect().left;
+            let shiftY = e.clientY - el.getBoundingClientRect().top;
+
+            function moveAt(pageX, pageY) {
+                humanObj.x = pageX - shiftX;
+                humanObj.y = pageY - shiftY;
+                el.style.left = humanObj.x + 'px';
+                el.style.top = humanObj.y + 'px';
+            }
+
+            function onMouseMove(e) {
+                moveAt(e.pageX, e.pageY);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+
+            el.onmouseup = () => {
+                document.removeEventListener('mousemove', onMouseMove);
+                el.classList.remove('dragging');
+                isDragging = false;
+                saveState();
+            };
+        };
+
+        el.onclick = () => {
+            selectedHuman = humanObj;
+            console.log("Selected: " + humanObj.name);
+        };
+    }
+
+    // --- SPEECH & AI ---
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.continuous = false;
+    recognition.lang = 'en-US';
+
+    document.onkeydown = (e) => {
+        if (e.code === "Space" && selectedHuman && !isDragging) {
+            recognition.start();
+            document.getElementById('speech-indicator').innerText = "Listening to you speak to " + selectedHuman.name + "...";
+        }
+    };
+
+    recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById('speech-indicator').innerText = "You said: " + transcript;
+        processAIResponse(selectedHuman, transcript);
+    };
+
+    async function processAIResponse(human, text) {
+        // Save user's words to memory
+        human.memory.push({ role: "user", text: text });
+
+        // Placeholder for Gemini API call
+        // For now, it uses a simple simulated AI logic to keep the script runnable
+        // To use real AI, you'd fetch from: https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=YOUR_API_KEY
+        
+        const responseText = `I am ${human.name}. You just said: "${text}". I will remember this.`;
+        
+        human.memory.push({ role: "ai", text: responseText });
+        speak(responseText);
+        saveState();
+    }
+
+    function speak(text) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        // Vary pitch slightly based on name length for different "voices"
+        utterance.pitch = 0.8 + (Math.random() * 0.5);
+        utterance.rate = 1;
+        window.speechSynthesis.speak(utterance);
+    }
+</script>
+
+</body>
+</html>
