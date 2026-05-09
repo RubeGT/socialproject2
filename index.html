@@ -51,15 +51,14 @@
 
         .human.selected { outline: 4px solid #3498db; }
 
-        /* New Thinking Animation */
         .human.thinking {
-            box-shadow: 0 0 20px #f1c40f;
-            animation: pulse 1s infinite alternate;
+            box-shadow: 0 0 25px #f1c40f;
+            animation: pulse 0.8s infinite alternate;
         }
 
         @keyframes pulse {
             from { transform: scale(1); }
-            to { transform: scale(1.1); }
+            to { transform: scale(1.15); }
         }
 
         .human.dragging {
@@ -76,33 +75,32 @@
 
         #trash-can {
             position: fixed;
-            bottom: 20px;
+            bottom: 60px;
             right: 20px;
-            width: 80px;
-            height: 80px;
+            width: 70px;
+            height: 70px;
             background: #ff4757;
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 30px;
-            transition: transform 0.2s, background 0.2s;
+            font-size: 24px;
+            transition: transform 0.2s;
         }
 
-        #trash-can.hovered {
-            transform: scale(1.3);
-            background: #ff0000;
-        }
+        #trash-can.hovered { transform: scale(1.3); background: red; }
 
-        #status {
+        #status-bar {
             position: fixed;
-            bottom: 40px;
+            bottom: 0;
             width: 100%;
-            text-align: center;
-            font-weight: 600;
-            background: rgba(255,255,255,0.8);
-            padding: 5px 0;
+            background: white;
+            padding: 10px;
+            text-align: right;
+            font-weight: bold;
+            border-top: 1px solid #ccc;
+            box-sizing: border-box;
         }
     </style>
 </head>
@@ -110,40 +108,40 @@
 
 <div id="ui">
     <button onclick="addHuman()">Add Human</button>
-    <p>1. Click a human to select.<br>2. Tap SPACE once to start talking.</p>
+    <p>1. Click human to select.<br>2. Press SPACE to <b>Start</b> talking.<br>3. Press SPACE again to <b>Stop/Send</b>.</p>
 </div>
 
-<div id="status">Status: Ready</div>
 <div id="trash-can">🗑️</div>
+<div id="status-bar">Status: Ready</div>
 
 <script>
     const API_KEY = "AIzaSyAZT_FImb1IohN1F_MOcqdxBDU8eRxj0no";
     let humans = [];
-    const humanNames = ["James", "Mary", "Robert", "Patricia", "John", "Jennifer", "Michael", "Linda", "David", "Elizabeth", "William", "Barbara", "Richard", "Susan", "Joseph", "Jessica"];
+    const names = ["James", "Mary", "Robert", "Patricia", "John", "Jennifer", "Michael", "Linda", "David", "Elizabeth"];
     const skinColors = ["#FFDBAC", "#F1C27D", "#E0AC69", "#8D5524", "#C68642"];
     
     let selectedHuman = null;
     let isDragging = false;
+    let isListening = false;
 
+    // --- SETUP ---
     window.onload = () => {
-        const saved = localStorage.getItem('socialProject2_v4');
-        if (saved) {
-            JSON.parse(saved).forEach(h => createHumanElement(h));
-        }
+        const saved = localStorage.getItem('socialProject2_v5');
+        if (saved) JSON.parse(saved).forEach(h => createHumanElement(h));
     };
 
     function save() {
-        localStorage.setItem('socialProject2_v4', JSON.stringify(humans.map(h => ({
+        localStorage.setItem('socialProject2_v5', JSON.stringify(humans.map(h => ({
             name: h.name, color: h.color, x: h.x, y: h.y, memory: h.memory, pitch: h.pitch
         }))));
     }
 
     function addHuman() {
         const hData = {
-            name: humanNames[Math.floor(Math.random() * humanNames.length)],
+            name: names[Math.floor(Math.random() * names.length)],
             color: skinColors[Math.floor(Math.random() * skinColors.length)],
-            x: 150 + (Math.random() * (window.innerWidth - 300)),
-            y: 150 + (Math.random() * (window.innerHeight - 300)),
+            x: Math.random() * (window.innerWidth - 100),
+            y: Math.random() * (window.innerHeight - 150),
             memory: [],
             pitch: 0.7 + (Math.random() * 0.6)
         };
@@ -173,19 +171,17 @@
             let ox = e.clientX - el.offsetLeft;
             let oy = e.clientY - el.offsetTop;
 
-            const trash = document.getElementById('trash-can');
-
             document.onmousemove = (me) => {
                 obj.x = me.pageX - ox;
                 obj.y = me.pageY - oy;
                 el.style.left = obj.x + 'px';
                 el.style.top = obj.y + 'px';
 
-                const rect = trash.getBoundingClientRect();
+                const rect = document.getElementById('trash-can').getBoundingClientRect();
                 if (me.pageX > rect.left && me.pageX < rect.right && me.pageY > rect.top && me.pageY < rect.bottom) {
-                    trash.classList.add('hovered');
+                    document.getElementById('trash-can').classList.add('hovered');
                 } else {
-                    trash.classList.remove('hovered');
+                    document.getElementById('trash-can').classList.remove('hovered');
                 }
             };
 
@@ -193,95 +189,80 @@
                 document.onmousemove = null;
                 el.classList.remove('dragging');
                 isDragging = false;
-
-                const rect = trash.getBoundingClientRect();
+                const rect = document.getElementById('trash-can').getBoundingClientRect();
                 if (me.pageX > rect.left && me.pageX < rect.right && me.pageY > rect.top && me.pageY < rect.bottom) {
-                    deleteHuman(obj);
-                    trash.classList.remove('hovered');
+                    obj.element.remove();
+                    humans = humans.filter(h => h !== obj);
+                    selectedHuman = null;
                 }
                 save();
             };
         };
     }
 
-    function deleteHuman(obj) {
-        obj.element.remove();
-        humans = humans.filter(h => h !== obj);
-        if (selectedHuman === obj) selectedHuman = null;
-        save();
-    }
-
-    // --- RECOGNITION FIXES ---
+    // --- RECOGNITION (TOGGLE MODE) ---
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    recognition.continuous = false; // Stops after one sentence
-    recognition.interimResults = false;
+    recognition.continuous = true; 
+    recognition.interimResults = true;
 
     document.onkeydown = (e) => {
         if (e.code === "Space" && selectedHuman && !isDragging) {
-            try { 
-                recognition.start(); 
-                document.getElementById('status').innerText = "🎤 Status: Listening... (Stop talking to finish)";
-            } catch(err) {
-                // If already running, don't crash
+            if (!isListening) {
+                recognition.start();
+                isListening = true;
+                document.getElementById('status-bar').innerText = "Status: Listening... (Press Space to Stop)";
+            } else {
+                recognition.stop();
+                isListening = false;
+                document.getElementById('status-bar').innerText = "Status: Sending to AI...";
             }
         }
     };
 
-    // Fired as soon as the browser detects you stopped talking
-    recognition.onspeechend = () => {
-        recognition.stop();
-        document.getElementById('status').innerText = "⌛ Status: Processing speech...";
-    };
-
     recognition.onresult = (event) => {
-        const text = event.results[0][0].transcript;
-        document.getElementById('status').innerText = `You: "${text}"`;
-        getAIResponse(selectedHuman, text);
+        const transcript = Array.from(event.results)
+            .map(result => result[0])
+            .map(result => result.transcript)
+            .join('');
+        
+        // If the user stops listening, process the final text
+        if (!isListening) {
+            getAIResponse(selectedHuman, transcript);
+        }
     };
 
     recognition.onerror = (event) => {
-        document.getElementById('status').innerText = "Status: Mic Error (" + event.error + ")";
+        document.getElementById('status-bar').innerText = `Status: Mic Error (${event.error})`;
+        isListening = false;
     };
 
     async function getAIResponse(human, input) {
-        // Visual feedback: Start glowing
+        if (!input.trim()) return;
         human.element.classList.add('thinking');
-        document.getElementById('status').innerText = `${human.name} is thinking...`;
         
-        const history = human.memory.map(m => `${m.role}: ${m.text}`).slice(-6).join("\n");
-        const prompt = `Your name is ${human.name}. Character context: Standard human. 
-        History: ${history}
-        The user says: "${input}"
-        Respond as a human in 1 short sentence.`;
-
         try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
-            const response = await fetch(url, {
+            const history = human.memory.map(m => `${m.role}: ${m.text}`).slice(-4).join("\n");
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                body: JSON.stringify({ contents: [{ parts: [{ text: `You are ${human.name}. Memory: ${history}. User says: ${input}. Respond in 1 short sentence.` }] }] })
             });
 
-            const result = await response.json();
-            const reply = result.candidates[0].content.parts[0].text;
+            const data = await response.json();
+            const reply = data.candidates[0].content.parts[0].text;
 
-            human.memory.push({ role: "User", text: input });
-            human.memory.push({ role: "You", text: reply });
+            human.memory.push({ role: "User", text: input }, { role: "You", text: reply });
+            document.getElementById('status-bar').innerText = `${human.name}: ${reply}`;
             
-            document.getElementById('status').innerText = `${human.name}: ${reply}`;
-            
-            // TTS
             window.speechSynthesis.cancel();
             const speech = new SpeechSynthesisUtterance(reply);
             speech.pitch = human.pitch;
             window.speechSynthesis.speak(speech);
-
             save();
         } catch (err) {
-            document.getElementById('status').innerText = "Status: AI Error. Check key/connection.";
+            document.getElementById('status-bar').innerText = "Status: AI Request Failed.";
         } finally {
-            // Stop glowing
             human.element.classList.remove('thinking');
         }
     }
