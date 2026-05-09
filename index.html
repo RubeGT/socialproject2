@@ -46,10 +46,21 @@
             user-select: none;
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
             border: 2px solid rgba(255,255,255,0.5);
-            transition: outline 0.2s;
+            transition: outline 0.2s, box-shadow 0.3s;
         }
 
         .human.selected { outline: 4px solid #3498db; }
+
+        /* New Thinking Animation */
+        .human.thinking {
+            box-shadow: 0 0 20px #f1c40f;
+            animation: pulse 1s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.1); }
+        }
 
         .human.dragging {
             cursor: grabbing;
@@ -58,9 +69,9 @@
         }
 
         @keyframes shake {
-            0% { transform: translate(1px, 1px) rotate(0deg); }
-            50% { transform: translate(-1px, -2px) rotate(-1deg); }
-            100% { transform: translate(1px, -1px) rotate(1deg); }
+            0% { transform: translate(1px, 1px); }
+            50% { transform: translate(-1px, -2px); }
+            100% { transform: translate(1px, -1px); }
         }
 
         #trash-can {
@@ -75,7 +86,6 @@
             align-items: center;
             justify-content: center;
             color: white;
-            font-weight: bold;
             font-size: 30px;
             transition: transform 0.2s, background 0.2s;
         }
@@ -91,7 +101,8 @@
             width: 100%;
             text-align: center;
             font-weight: 600;
-            pointer-events: none;
+            background: rgba(255,255,255,0.8);
+            padding: 5px 0;
         }
     </style>
 </head>
@@ -99,10 +110,10 @@
 
 <div id="ui">
     <button onclick="addHuman()">Add Human</button>
-    <p>1. Click a human to select.<br>2. Hold SPACE to talk.</p>
+    <p>1. Click a human to select.<br>2. Tap SPACE once to start talking.</p>
 </div>
 
-<div id="status">Ready</div>
+<div id="status">Status: Ready</div>
 <div id="trash-can">🗑️</div>
 
 <script>
@@ -115,14 +126,14 @@
     let isDragging = false;
 
     window.onload = () => {
-        const saved = localStorage.getItem('socialProject2_v3');
+        const saved = localStorage.getItem('socialProject2_v4');
         if (saved) {
             JSON.parse(saved).forEach(h => createHumanElement(h));
         }
     };
 
     function save() {
-        localStorage.setItem('socialProject2_v3', JSON.stringify(humans.map(h => ({
+        localStorage.setItem('socialProject2_v4', JSON.stringify(humans.map(h => ({
             name: h.name, color: h.color, x: h.x, y: h.y, memory: h.memory, pitch: h.pitch
         }))));
     }
@@ -170,7 +181,6 @@
                 el.style.left = obj.x + 'px';
                 el.style.top = obj.y + 'px';
 
-                // Trash collision check
                 const rect = trash.getBoundingClientRect();
                 if (me.pageX > rect.left && me.pageX < rect.right && me.pageY > rect.top && me.pageY < rect.bottom) {
                     trash.classList.add('hovered');
@@ -189,7 +199,6 @@
                     deleteHuman(obj);
                     trash.classList.remove('hovered');
                 }
-                
                 save();
             };
         };
@@ -198,21 +207,31 @@
     function deleteHuman(obj) {
         obj.element.remove();
         humans = humans.filter(h => h !== obj);
-        if (selectedHuman === obj) {
-            selectedHuman = null;
-            document.getElementById('status').innerText = "Human Deleted";
-        }
+        if (selectedHuman === obj) selectedHuman = null;
         save();
     }
 
-    // --- TTS & RECOGNITION ---
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    
+    // --- RECOGNITION FIXES ---
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false; // Stops after one sentence
+    recognition.interimResults = false;
+
     document.onkeydown = (e) => {
         if (e.code === "Space" && selectedHuman && !isDragging) {
-            try { recognition.start(); } catch(err) {}
-            document.getElementById('status').innerText = "Listening...";
+            try { 
+                recognition.start(); 
+                document.getElementById('status').innerText = "🎤 Status: Listening... (Stop talking to finish)";
+            } catch(err) {
+                // If already running, don't crash
+            }
         }
+    };
+
+    // Fired as soon as the browser detects you stopped talking
+    recognition.onspeechend = () => {
+        recognition.stop();
+        document.getElementById('status').innerText = "⌛ Status: Processing speech...";
     };
 
     recognition.onresult = (event) => {
@@ -221,12 +240,18 @@
         getAIResponse(selectedHuman, text);
     };
 
+    recognition.onerror = (event) => {
+        document.getElementById('status').innerText = "Status: Mic Error (" + event.error + ")";
+    };
+
     async function getAIResponse(human, input) {
+        // Visual feedback: Start glowing
+        human.element.classList.add('thinking');
         document.getElementById('status').innerText = `${human.name} is thinking...`;
         
-        const history = human.memory.map(m => `${m.role}: ${m.text}`).join("\n");
-        const prompt = `Your name is ${human.name}. 
-        Memory: ${history}
+        const history = human.memory.map(m => `${m.role}: ${m.text}`).slice(-6).join("\n");
+        const prompt = `Your name is ${human.name}. Character context: Standard human. 
+        History: ${history}
         The user says: "${input}"
         Respond as a human in 1 short sentence.`;
 
@@ -246,16 +271,18 @@
             
             document.getElementById('status').innerText = `${human.name}: ${reply}`;
             
-            // Procedural TTS Execution
-            window.speechSynthesis.cancel(); // Clear any pending speech
+            // TTS
+            window.speechSynthesis.cancel();
             const speech = new SpeechSynthesisUtterance(reply);
             speech.pitch = human.pitch;
-            speech.rate = 1;
             window.speechSynthesis.speak(speech);
 
             save();
         } catch (err) {
-            document.getElementById('status').innerText = "AI Error. Check your connection.";
+            document.getElementById('status').innerText = "Status: AI Error. Check key/connection.";
+        } finally {
+            // Stop glowing
+            human.element.classList.remove('thinking');
         }
     }
 </script>
